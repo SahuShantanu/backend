@@ -8,7 +8,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Database Config
-db_uri = os.environ.get('DATABASE_URL', 'postgresql://postgres:AE10b$$esahu@db.lochvzhjygxuxoyezmig.supabase.co:5432/postgres')
+db_uri = os.environ.get('DATABASE_URL', 'postgresql://neondb_owner:npg_76HBGhCivLaM@ep-divine-forest-ahu8ujos-pooler.c-3.us-east-1.aws.neon.tech/mac_theme_db?sslmode=require&channel_binding=require')
 app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
