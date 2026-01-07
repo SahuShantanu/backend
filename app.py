@@ -280,6 +280,68 @@ def delete_note(note_id):
     db.session.commit()
     return jsonify({"message": "Note deleted"})
 
+@app.route('/api/todos/stats', methods=['GET'])
+def get_todo_stats():
+    user = get_user_from_request()
+    if not user:
+        return jsonify({"error": "User not authenticated"}), 401
+
+    from datetime import datetime, timedelta, date
+
+    today = date.today()
+    
+    # --- Weekly Stats (Last 7 Days) ---
+    start_of_week = today - timedelta(days=6)
+    
+    # Prepare result structure for last 7 days initialized to 0
+    weekly_data = []
+    for i in range(7):
+        day = start_of_week + timedelta(days=i)
+        weekly_data.append({
+            "date": day.isoformat(),
+            "short_date": day.strftime('%a'), # Mon, Tue...
+            "completed": 0,
+            "total": 0
+        })
+
+    # Fetch relevant todos
+    weekly_todos = Todo.query.filter(
+        Todo.user_id == user.id,
+        Todo.date >= start_of_week,
+        Todo.date <= today
+    ).all()
+
+    # Aggregate
+    for todo in weekly_todos:
+        day_iso = todo.date.isoformat()
+        for d in weekly_data:
+            if d['date'] == day_iso:
+                d['total'] += 1
+                if todo.is_completed:
+                    d['completed'] += 1
+
+    # --- Monthly Stats (Current Month) ---
+    # Start of current month
+    start_of_month = today.replace(day=1)
+    
+    monthly_todos = Todo.query.filter(
+        Todo.user_id == user.id,
+        Todo.date >= start_of_month
+        # No end date needed, effectively "from start of month onwards"
+    ).all()
+
+    monthly_stats = {
+        "total": len(monthly_todos),
+        "completed": sum(1 for t in monthly_todos if t.is_completed),
+        "pending": sum(1 for t in monthly_todos if not t.is_completed)
+    }
+
+    return jsonify({
+        "weekly": weekly_data,
+        "monthly": monthly_stats
+    })
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port)
