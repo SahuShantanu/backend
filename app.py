@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -70,24 +70,6 @@ class Note(db.Model):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }
 
-
-class Music(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(255), nullable=False)
-    artist = db.Column(db.String(100))
-    filename = db.Column(db.String(255), nullable=False)
-    duration = db.Column(db.Integer)
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "title": self.title,
-            "artist": self.artist,
-            "filename": self.filename,
-            "duration": self.duration,
-            "url": f"/music/{self.filename}" # Assuming static serve or similar
-        }
 
 # --- Helper to get user ---
 def get_user_from_request():
@@ -297,76 +279,6 @@ def delete_note(note_id):
     db.session.delete(note)
     db.session.commit()
     return jsonify({"message": "Note deleted"})
-
-# --- Music Endpoints ---
-@app.route('/api/music', methods=['GET'])
-def get_music():
-    tracks = Music.query.order_by(Music.title).all()
-    return jsonify([t.to_dict() for t in tracks])
-
-@app.route('/api/music', methods=['POST'])
-def add_music():
-    # Check if this is a multipart upload (file included)
-    title = request.form.get('title')
-    
-    # Fallback to JSON if no form data (standard metadata-only add)
-    if not title and request.is_json:
-        data = request.json
-        return _add_music_metadata(data)
-
-    file = request.files.get('file')
-    if not title:
-        return jsonify({"error": "Title required"}), 400
-        
-    filename = ""
-    # Save file if provided
-    if file:
-        filename = file.filename
-        # Ensure music directory exists
-        music_folder = os.path.join(os.getcwd(), '..', 'music')
-        if not os.path.exists(music_folder):
-            os.makedirs(music_folder)
-        
-        file.save(os.path.join(music_folder, filename))
-    else:
-        # Fallback if filename passed manually in form
-        filename = request.form.get('filename')
-        if not filename:
-             return jsonify({"error": "File or filename required"}), 400
-
-    new_track = Music(
-        title=title,
-        artist=request.form.get('artist', 'Unknown'),
-        filename=filename,
-        duration=request.form.get('duration', 0)
-    )
-    
-    db.session.add(new_track)
-    db.session.commit()
-    return jsonify(new_track.to_dict())
-
-def _add_music_metadata(data):
-    if not data or not data.get('title') or not data.get('filename'):
-        return jsonify({"error": "Title and filename required"}), 400
-        
-    new_track = Music(
-        title=data['title'],
-        artist=data.get('artist', 'Unknown'),
-        filename=data['filename'],
-        duration=data.get('duration', 0)
-    )
-    
-    db.session.add(new_track)
-    db.session.commit()
-    return jsonify(new_track.to_dict())
-
-@app.route('/music/<path:filename>')
-def serve_music(filename):
-    # Serve from the 'music' directory in the parent folder
-    music_folder = os.path.join(os.getcwd(), '..', 'music')
-    # If running inside 'backend' dir, '..' gets us to root.
-    # Adjust path if necessary depending on deployment structure.
-    return send_from_directory(music_folder, filename)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
