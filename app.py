@@ -71,6 +71,24 @@ class Note(db.Model):
         }
 
 
+class Music(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    artist = db.Column(db.String(100))
+    filename = db.Column(db.String(255), nullable=False)
+    duration = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "artist": self.artist,
+            "filename": self.filename,
+            "duration": self.duration,
+            "url": f"/music/{self.filename}" # Assuming static serve or similar
+        }
+
 # --- Helper to get user ---
 def get_user_from_request():
     # In a real app, use session/token. Here we rely on 'username' header or query param for simplicity
@@ -279,6 +297,30 @@ def delete_note(note_id):
     db.session.delete(note)
     db.session.commit()
     return jsonify({"message": "Note deleted"})
+
+# --- Music Endpoints ---
+@app.route('/api/music', methods=['GET'])
+def get_music():
+    tracks = Music.query.order_by(Music.title).all()
+    return jsonify([t.to_dict() for t in tracks])
+
+@app.route('/api/music', methods=['POST'])
+def add_music():
+    # Only allow uploading metadata for this demo, assumes files are on disk
+    data = request.json
+    if not data or not data.get('title') or not data.get('filename'):
+        return jsonify({"error": "Title and filename required"}), 400
+        
+    new_track = Music(
+        title=data['title'],
+        artist=data.get('artist', 'Unknown'),
+        filename=data['filename'],
+        duration=data.get('duration', 0)
+    )
+    
+    db.session.add(new_track)
+    db.session.commit()
+    return jsonify(new_track.to_dict())
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
