@@ -53,9 +53,23 @@ class Todo(db.Model):
             "date": self.date.isoformat()
         }
 
-@app.route('/api/status', methods=['GET'])
-def status():
-    return jsonify({"status": "running", "service": "macOS 26 Backend"})
+class Note(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
+    title = db.Column(db.String(255))
+    body = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "body": self.body,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None
+        }
+
 
 # --- Helper to get user ---
 def get_user_from_request():
@@ -208,6 +222,64 @@ def get_profile():
          
     return jsonify(user.to_dict())
 
+# --- Notes Endpoints ---
+@app.route('/api/notes', methods=['GET'])
+def get_notes():
+    user = get_user_from_request()
+    if not user:
+        return jsonify({"error": "User not authenticated"}), 401
+    
+    notes = Note.query.filter_by(user_id=user.id).order_by(Note.updated_at.desc()).all()
+    return jsonify([n.to_dict() for n in notes])
+
+@app.route('/api/notes', methods=['POST'])
+def create_note():
+    user = get_user_from_request()
+    if not user:
+        return jsonify({"error": "User not authenticated"}), 401
+    
+    data = request.json
+    new_note = Note(
+        user_id=user.id,
+        title=data.get('title', ''),
+        body=data.get('body', '')
+    )
+    
+    db.session.add(new_note)
+    db.session.commit()
+    return jsonify(new_note.to_dict())
+
+@app.route('/api/notes/<int:note_id>', methods=['PUT'])
+def update_note(note_id):
+    user = get_user_from_request()
+    if not user:
+        return jsonify({"error": "User not authenticated"}), 401
+        
+    note = Note.query.filter_by(id=note_id, user_id=user.id).first()
+    if not note:
+        return jsonify({"error": "Note not found"}), 404
+        
+    data = request.json
+    if 'title' in data: note.title = data['title']
+    if 'body' in data: note.body = data['body']
+    
+    db.session.commit()
+    return jsonify(note.to_dict())
+
+@app.route('/api/notes/<int:note_id>', methods=['DELETE'])
+def delete_note(note_id):
+    user = get_user_from_request()
+    if not user:
+        return jsonify({"error": "User not authenticated"}), 401
+        
+    note = Note.query.filter_by(id=note_id, user_id=user.id).first()
+    if not note:
+        return jsonify({"error": "Note not found"}), 404
+        
+    db.session.delete(note)
+    db.session.commit()
+    return jsonify({"message": "Note deleted"})
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port)
