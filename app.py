@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -321,6 +321,14 @@ def add_music():
     db.session.add(new_track)
     db.session.commit()
     return jsonify(new_track.to_dict())
+
+@app.route('/music/<path:filename>')
+def serve_music(filename):
+    # Serve from the 'music' directory in the parent folder
+    music_folder = os.path.join(os.getcwd(), '..', 'music')
+    # If running inside 'backend' dir, '..' gets us to root.
+    # Adjust path if necessary depending on deployment structure.
+    return send_from_directory(music_folder, filename)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
