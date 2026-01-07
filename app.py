@@ -306,8 +306,46 @@ def get_music():
 
 @app.route('/api/music', methods=['POST'])
 def add_music():
-    # Only allow uploading metadata for this demo, assumes files are on disk
-    data = request.json
+    # Check if this is a multipart upload (file included)
+    title = request.form.get('title')
+    
+    # Fallback to JSON if no form data (standard metadata-only add)
+    if not title and request.is_json:
+        data = request.json
+        return _add_music_metadata(data)
+
+    file = request.files.get('file')
+    if not title:
+        return jsonify({"error": "Title required"}), 400
+        
+    filename = ""
+    # Save file if provided
+    if file:
+        filename = file.filename
+        # Ensure music directory exists
+        music_folder = os.path.join(os.getcwd(), '..', 'music')
+        if not os.path.exists(music_folder):
+            os.makedirs(music_folder)
+        
+        file.save(os.path.join(music_folder, filename))
+    else:
+        # Fallback if filename passed manually in form
+        filename = request.form.get('filename')
+        if not filename:
+             return jsonify({"error": "File or filename required"}), 400
+
+    new_track = Music(
+        title=title,
+        artist=request.form.get('artist', 'Unknown'),
+        filename=filename,
+        duration=request.form.get('duration', 0)
+    )
+    
+    db.session.add(new_track)
+    db.session.commit()
+    return jsonify(new_track.to_dict())
+
+def _add_music_metadata(data):
     if not data or not data.get('title') or not data.get('filename'):
         return jsonify({"error": "Title and filename required"}), 400
         
