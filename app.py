@@ -1,4 +1,5 @@
 import os
+import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -266,19 +267,42 @@ def update_note(note_id):
     db.session.commit()
     return jsonify(note.to_dict())
 
-@app.route('/api/notes/<int:note_id>', methods=['DELETE'])
-def delete_note(note_id):
-    user = get_user_from_request()
-    if not user:
-        return jsonify({"error": "User not authenticated"}), 401
-        
-    note = Note.query.filter_by(id=note_id, user_id=user.id).first()
-    if not note:
-        return jsonify({"error": "Note not found"}), 404
-        
     db.session.delete(note)
     db.session.commit()
     return jsonify({"message": "Note deleted"})
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    data = request.json
+    if not data or not data.get('message') or not data.get('apiKey'):
+        return jsonify({"error": "Message and API Key required"}), 400
+    
+    api_key = data['apiKey']
+    user_message = data['message']
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": user_message}]
+        }]
+    }
+    
+    try:
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+             return jsonify({"error": f"Gemini API Error: {response.text}"}), response.status_code
+             
+        ai_response = response.json()
+        # Extract text from Gemini response structure
+        try:
+            text = ai_response['candidates'][0]['content']['parts'][0]['text']
+            return jsonify({"reply": text})
+        except (KeyError, IndexError):
+            return jsonify({"error": "Invalid response format from Gemini"}), 500
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
