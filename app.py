@@ -361,29 +361,34 @@ def send_message():
 
 @app.route('/api/messages/history', methods=['GET'])
 def get_message_history():
-    user = get_user_from_request()
-    if not user:
-        return jsonify({"error": "User not authenticated"}), 401
-    
-    partner_id = request.args.get('partner_id')
-    if not partner_id:
-        return jsonify({"error": "Partner ID required"}), 400
+    try:
+        user = get_user_from_request()
+        if not user:
+            return jsonify({"error": "User not authenticated"}), 401
         
-    # Fetch messages between user and partner (both directions)
-    # (sender=me AND receiver=them) OR (sender=them AND receiver=me)
-    from sqlalchemy import or_, and_
-    
-    messages = Message.query.filter(
-        or_(
-            and_(Message.sender_id == user.id, Message.receiver_id == partner_id),
-            and_(Message.sender_id == partner_id, Message.receiver_id == user.id)
-        )
-    ).order_by(Message.created_at.asc()).all()
-    
-    return jsonify([m.to_dict() for m in messages])
+        partner_id = request.args.get('partner_id', type=int)
+        if not partner_id:
+            return jsonify({"error": "Partner ID required"}), 400
+            
+        # Fetch messages between user and partner (both directions)
+        # (sender=me AND receiver=them) OR (sender=them AND receiver=me)
+        from sqlalchemy import or_, and_
+        
+        messages = Message.query.filter(
+            or_(
+                and_(Message.sender_id == user.id, Message.receiver_id == partner_id),
+                and_(Message.sender_id == partner_id, Message.receiver_id == user.id)
+            )
+        ).order_by(Message.created_at.asc()).all()
+        
+        return jsonify([m.to_dict() for m in messages])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Ensure tables exist (Run on import for Gunicorn/Render)
+with app.app_context():
+    db.create_all()
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port)
