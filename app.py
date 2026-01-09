@@ -304,6 +304,86 @@ def chat():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+class Message(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
+    receiver_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "sender_id": self.sender_id,
+            "receiver_id": self.receiver_id,
+            "text": self.text,
+            "created_at": self.created_at.isoformat()
+        }
+
+# --- Chat Endpoints ---
+@app.route('/api/users', methods=['GET'])
+def get_users():
+    current_user = get_user_from_request()
+    # In a real app, you might want to require auth, but for "Add Chat" we just need a list.
+    # We'll filter out the current user if authenticated.
+    
+    users = Profile.query.all()
+    user_list = []
+    
+    for u in users:
+        if current_user and u.id == current_user.id:
+            continue
+        user_list.append(u.to_dict())
+        
+    return jsonify(user_list)
+
+@app.route('/api/messages', methods=['POST'])
+def send_message():
+    sender = get_user_from_request()
+    if not sender:
+        return jsonify({"error": "User not authenticated"}), 401
+    
+    data = request.json
+    if not data or not data.get('receiver_id') or not data.get('text'):
+        return jsonify({"error": "Receiver and text required"}), 400
+    
+    new_msg = Message(
+        sender_id=sender.id,
+        receiver_id=data['receiver_id'],
+        text=data['text']
+    )
+    
+    db.session.add(new_msg)
+    db.session.commit()
+    
+    return jsonify(new_msg.to_dict())
+
+@app.route('/api/messages/history', methods=['GET'])
+def get_message_history():
+    user = get_user_from_request()
+    if not user:
+        return jsonify({"error": "User not authenticated"}), 401
+    
+    partner_id = request.args.get('partner_id')
+    if not partner_id:
+        return jsonify({"error": "Partner ID required"}), 400
+        
+    # Fetch messages between user and partner (both directions)
+    # (sender=me AND receiver=them) OR (sender=them AND receiver=me)
+    from sqlalchemy import or_, and_
+    
+    messages = Message.query.filter(
+        or_(
+            and_(Message.sender_id == user.id, Message.receiver_id == partner_id),
+            and_(Message.sender_id == partner_id, Message.receiver_id == user.id)
+        )
+    ).order_by(Message.created_at.asc()).all()
+    
+    return jsonify([m.to_dict() for m in messages])
+
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port)
