@@ -9,6 +9,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Database Config
+# updated the path
 db_uri = os.environ.get('DATABASE_URL', 'postgresql://postgres:AE10b$$e@34.173.159.63:5432/mac_theme_db')
 app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
